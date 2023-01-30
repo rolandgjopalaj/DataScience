@@ -1,0 +1,260 @@
+---
+title: "NYC Jobs"
+author: "Roland Gjopalaj"
+date: "2023-01-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Overview 
+
+[This dataset contains current job postings available on the City of New York’s official jobs site](http://www.nyc.gov/html/careers/html/search/search.shtml)
+
+Internal postings available to city employees and external postings available to the general public are included.
+
+
+## Libraries to import 
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(readr)
+library(lubridate)
+library(ggplot2)
+```
+
+
+## Dataset to import 
+The dataset we are going to use to do our studyng.
+
+```{r}
+## Import the dataset
+
+jobs = read_csv("JOBS_nyc.csv")
+jobs
+```
+
+## Cleanin the dataset
+
+If you take a look at the data you will notice that some of the rows are duplicated and that in not efficient so we are going to remove all of theme.
+
+```{r}
+## remove the duplicated lines
+jobs = jobs[!duplicated(jobs), ]
+jobs
+```
+
+
+After that we need to remove the unnecessary data and to keep only the data we want to use.
+
+To facilitate a little bit our work we can change the names of the columns so we don't need to use characters as "`".
+
+
+
+```{r}
+## Select the necessary data and rename the columns (practical names)
+
+jobs = jobs %>% 
+  select(`Job ID`, `Agency`, `Posting Type`, `# Of Positions`, `Title Classification`, `Job Category`, `Full-Time/Part-Time indicator`, `Career Level`, `Salary`, `Work Location`, `Division/Work Unit`, `Posting Date`, `Posting Updated`) %>% 
+  rename(Id=`Job ID`, Posting_Type=`Posting Type`, Nr_of_Positions=`# Of Positions`, Classification=`Title Classification`, Job_Category=`Job Category`, FullPart_Time=`Full-Time/Part-Time indicator`, Career_Level=`Career Level`, Work_Location=`Work Location`, Work_Unit=`Division/Work Unit`, Posting_Date=`Posting Date`, Posting_Updated=`Posting Updated`)
+
+ jobs
+```
+
+In the dataset we have a column that doesn't contain atomic data so the best choice is to separate it into atomic data so we can use the data properly.
+
+
+```{r}
+## Fix the salary problem (not atomic data)
+## separating salary interval in  different columns 
+
+jobs = jobs %>% 
+  separate(Salary, into = c("Salary_From", "Salary_To", "Salary_Frequency"), 
+         sep = "-", convert = TRUE)
+
+jobs
+
+```
+The salary data in this dataset is a little bit a mes as it is in different frequencies.
+As we want to do a lot of studies base on the salary we need to create a column (Salary index) that will be in "hours".  (After some researches in America the average of a part-time job is 17 h/week and full-time is 37 h/week and a year has 260 working days)
+
+
+```{r}
+## create a salary index (per hour)
+
+jobs = jobs %>% 
+  mutate(Salary_Index = 
+           ifelse(Salary_Frequency=="Hourly",
+                 (Salary_From+Salary_To)/2,
+                 ifelse(FullPart_Time=="P",
+                       ## if the work is  part-time
+                       ifelse(Salary_Frequency=="Annual",
+                             (Salary_From+Salary_To)/(17*260),
+                             (Salary_From+Salary_To)/(17)
+                       ),
+                       ## if the work is  full-time
+                       ifelse(Salary_Frequency=="Annual",
+                             (Salary_From+Salary_To)/(37*260),
+                             (Salary_From+Salary_To)/(37)
+                       )
+                 )
+          )
+      )
+
+jobs
+```
+
+After that we need to add a new column that will be called ACR that stands for acronym and will be a abbreviation of the agency name (because during the presentation and the visualization the abbreviation will look batter and it wont overlap).
+
+```{r}
+##I used this command to ad the ACR for every agency to be more visible on the chart
+##jobs = mutate(jobs, ACR = ifelse(Agency=="AGENCY NAME", "ACR", ACR)) 
+
+##Just execute this command to go on 
+jobs = read.csv("JOBS_ncyV2.csv")##The dataset after adding the acronym column(ACR)
+
+##select the agencies that have the most number of postings
+agencyMore=count(jobs, ACR) %>% 
+  arrange(-n) %>% 
+  top_n(10) %>% 
+  pull(ACR) %>% 
+  unlist()
+
+agencyMore = jobs %>% filter(ACR %in% agencyMore)
+
+##visualize it
+ggplot(data = agencyMore) +
+  geom_bar(mapping = aes(x = ACR))
+
+#####################################################
+##select the agencies that have the most number of postings
+agencyLess=count(jobs, ACR) %>% 
+  arrange(n)  %>% 
+  pull(ACR) %>% 
+  unlist()
+
+##another way to select the first 10
+agencyLess=agencyLess[0:10]
+
+agencyLess = jobs %>% filter(ACR %in% agencyLess)
+
+ggplot(data = agencyLess) +
+  geom_bar(mapping = aes(x = ACR))
+
+```
+
+```{r}
+jobs = read.csv("JOBS_ncyV2.csv")
+
+##fix the date(convert it from string to date)
+jobs = jobs %>% 
+  separate(Posting_Date, c("month", "day", "year"), sep = "/") %>% 
+  mutate(Posting_Date = make_date(year, month, day)) %>% 
+  select(Id:Work_Unit, Posting_Date, Posting_Updated:ACR)
+jobs = jobs %>% 
+  separate(Posting_Updated, c("month", "day", "year"), sep = "/") %>% 
+  mutate(Posting_Updated = make_date(year, month, day)) %>% 
+  select(Id:Posting_Date, Posting_Updated, Salary_Index, ACR)
+
+
+```
+
+
+```{r}
+
+##change some values for better visibility 
+jobs["Career_Level"][jobs["Career_Level"] == "Experienced (non-manager)"] = "EXP-NO-Manager"
+
+
+## show the salaries in base of the career level
+## and with the help of the colors we can see the level of the difficulty 
+## we can also filter the time (from a given year to the day of 17/01/2013)
+show = function(posting_type, myDateFrom) {
+  jobs[!is.na(jobs$Career_Level), ] %>% ##remove the NA elements 
+    filter(Salary_From>0, Posting_Type==posting_type, Posting_Date > myDateFrom) %>% 
+    ggplot(aes(Career_Level, Salary_Index, colour = Classification, size=Nr_of_Positions)) +
+    geom_point(alpha = 0.4, na.rm = TRUE) +   
+    theme_minimal() 
+}
+
+
+
+show("External", as.Date(paste(2015,"-", 1, "-",1, sep = "")))
+show("External", as.Date(paste(2022,"-", 1, "-",1, sep = "")))
+show("Internal", as.Date(paste(2023,"-", 1, "-",1, sep = "")))
+
+
+```
+
+```{r}
+## Top 10 most frequent Job_category
+topCategory = jobs %>% 
+  count(Job_Category) %>% 
+  pull(Job_Category) %>% 
+  unlist()
+topCategory = topCategory[0:5]
+
+ggplot(data = filter(jobs, Job_Category %in% topCategory)) +
+  geom_bar(mapping = aes(x = Job_Category))+
+  scale_x_discrete(guide = guide_axis(n.dodge=5))
+
+
+```
+
+
+
+
+
+```{r}
+## posts durind the years based on the number of opened positions, divided by the classification group, and with some salary details.
+jobs %>% 
+  ggplot(aes(Posting_Date, Nr_of_Positions, colour = Classification, size= Salary_Index))+
+  geom_point(alpha = 0.5, na.rm = TRUE)+
+   scale_x_date(date_labels = "%Y")
+
+```
+
+
+
+```{r}
+
+##create  a column difficulty(numeric) that will be the numeric interpretation of classification
+
+## First we remove the "-" symbol to avoid problems with separating
+jobs["Classification"][jobs["Classification"] == "Non-Competitive-5"] = "NonCompetitive-5"
+
+##Here we want to create a model of how the difficulty of a job goes based on the salary
+
+
+jobsDiff=jobs %>% 
+  separate(Classification, c("Classification","Difficulty"), sep = "-")
+
+mod = lm( Difficulty ~ Posting_Date, data = jobsDiff)
+##summary(mod)
+
+
+jobsDiff %>% 
+  ggplot(aes(Posting_Date,Difficulty))+
+  geom_point(na.rm = TRUE)+
+  geom_abline(intercept = mod$coefficients[1], 
+              slope = mod$coefficients[2], 
+              color = "red")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
