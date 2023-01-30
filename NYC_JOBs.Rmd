@@ -130,7 +130,7 @@ ggplot(data = agencyMore) +
   geom_bar(mapping = aes(x = ACR))
 
 #####################################################
-##select the agencies that have the most number of postings
+##select the agencies that have the lower number of postings
 agencyLess=count(jobs, ACR) %>% 
   arrange(n)  %>% 
   pull(ACR) %>% 
@@ -146,6 +146,8 @@ ggplot(data = agencyLess) +
 
 ```
 
+
+Here we fix the column <*Posting_Date*> by converting it from string to Data 
 ```{r}
 jobs = read.csv("JOBS_ncyV2.csv")
 
@@ -162,6 +164,12 @@ jobs = jobs %>%
 
 ```
 
+Here we do the same thing as above. Change some values so are more visible and dont overlap.
+
+Here we show the salaries in base of the career level and also the difficulty and the size that shows the number of open positions for that job
+Than we filter the time to have a closer look at the information given.
+
+A fun fact of this plot is that we can notice that for some reason the "experienced but not managers can gain more than managers at some different jobs before 2023. And in 2023 some entry-level jobs pay more than the others.
 
 ```{r}
 
@@ -171,6 +179,7 @@ jobs["Career_Level"][jobs["Career_Level"] == "Experienced (non-manager)"] = "EXP
 
 ## show the salaries in base of the career level
 ## and with the help of the colors we can see the level of the difficulty 
+## The size indeed shows the number of open positions for that job
 ## we can also filter the time (from a given year to the day of 17/01/2013)
 show = function(posting_type, myDateFrom) {
   jobs[!is.na(jobs$Career_Level), ] %>% ##remove the NA elements 
@@ -189,6 +198,11 @@ show("Internal", as.Date(paste(2023,"-", 1, "-",1, sep = "")))
 
 ```
 
+
+An other interesting information to get from this dataset is to look for the most frequent job categories.
+Here we are showing the top 5.
+As the labels are too long we use <*scale_x_discrete(guide = guide_axis(n.dodge=5))*> to make it more visible and easier to understand.
+
 ```{r}
 ## Top 10 most frequent Job_category
 topCategory = jobs %>% 
@@ -206,10 +220,10 @@ ggplot(data = filter(jobs, Job_Category %in% topCategory)) +
 
 
 
-
+This plot shows posts during the years based on the number of opened positions, divided by the classification group, and with some salary details.(salary "per hour")
 
 ```{r}
-## posts durind the years based on the number of opened positions, divided by the classification group, and with some salary details.
+## posts during the years based on the number of opened positions, divided by the classification group, and with some salary details.
 jobs %>% 
   ggplot(aes(Posting_Date, Nr_of_Positions, colour = Classification, size= Salary_Index))+
   geom_point(alpha = 0.5, na.rm = TRUE)+
@@ -218,15 +232,17 @@ jobs %>%
 ```
 
 
+Here we want to create a model of how the difficulty of a job goes based on the salary.
+As we can see it is + as it should be.
 
 ```{r}
 
-##create  a column difficulty(numeric) that will be the numeric interpretation of classification
+##create a column difficulty(numeric) that will be the numeric interpretation of classification
 
 ## First we remove the "-" symbol to avoid problems with separating
 jobs["Classification"][jobs["Classification"] == "Non-Competitive-5"] = "NonCompetitive-5"
 
-##Here we want to create a model of how the difficulty of a job goes based on the salary
+##create a model of how the difficulty of a job goes based on the salary
 
 
 jobsDiff=jobs %>% 
