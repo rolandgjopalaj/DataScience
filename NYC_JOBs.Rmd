@@ -207,6 +207,7 @@ As the labels are too long we use <*scale_x_discrete(guide = guide_axis(n.dodge=
 ## Top 10 most frequent Job_category
 topCategory = jobs %>% 
   count(Job_Category) %>% 
+  arrange(-n) %>% 
   pull(Job_Category) %>% 
   unlist()
 topCategory = topCategory[0:5]
